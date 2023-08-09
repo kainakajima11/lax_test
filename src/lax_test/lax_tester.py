@@ -1,5 +1,6 @@
 from typing import Dict,Any
 import numpy as np
+import math
 import time
 import pathlib
 import subprocess
@@ -28,15 +29,19 @@ class LaxTester:
             self.sf.atoms["mask"] = [i%2 for i in range(len(self.sf))]
             sf_laich.atoms["mask"] = [i%2 for i in range(len(self.sf))]
 
+            laich_config = self.config["md_config"].copy()
+            laich_config["MPIGridX"] = 1
+            laich_config["MPIGridY"] = 1
+            laich_config["MPIGridZ"] = 1
+
             sf_laich.laich(
                 calc_dir = "laich_calc",
-                laich_config = self.config["md_config"],
+                laich_config = laich_config,
                 laich_cmd = "~/Laich/src/build/laich",
                 print_laich = False,
                 exist_ok = True,
                 mask_info = self.config["laich_mask_info"]
             )
-                        
             self.sf.lax(
                 calc_dir = "lax_calc",
                 lax_config = self.config["md_config"],
@@ -44,15 +49,17 @@ class LaxTester:
                 print_lax = False,
                 exist_ok = True,
                 mask_info = self.config["lax_mask_info"],
-            )
-            time.sleep(3)
+            )           
             #2つの結果をimportします。
             sf_laich.import_dumppos(self.config["calc_dir"] / f"laich_calc/dump.pos.{self.config['md_config']['TotalStep']}")
             self.sf.import_dumppos(self.config["calc_dir"] / f"lax_calc/dump.pos.{self.config['md_config']['TotalStep']}")
             
             #2つの結果を比較します.
+            atoms_diff = (sf_laich.atoms - self.sf.atoms).abs()
+            for i,dim in enumerate(["x", "y", "z"]):
+                atoms_diff[dim] = [min(diff, math.fabs(diff-self.sf.cell[i])) for diff in atoms_diff[dim]]
             print(f"----- {loop} -----")
-            print((sf_laich.atoms - self.sf.atoms).abs().max())
+            print(atoms_diff.max())
 
             if loop != self.config["loop_num"] - 1:
                 subprocess.call(f"rm -r {self.config['calc_dir'] / 'packmol_tmp'}".split())
@@ -108,7 +115,6 @@ class LaxTester:
             print_lax = False,
             exist_ok = True,
         )
-        time.sleep(3)
         self.sf = SimulationFrame("C H O N Si")
         self.sf.import_dumppos(self.config["calc_dir"] / "prelax_calc/dump.pos.0")
         sf_laich.import_dumppos(self.config["calc_dir"] / "prelax_calc/dump.pos.0")
