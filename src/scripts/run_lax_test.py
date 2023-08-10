@@ -6,6 +6,7 @@ import pathlib
 from lax_test import LaxTester
 from limda import SimulationFrame
 
+# run lax test
 """
 laichとlaxを同じ条件で回し、結果を比較する
 
@@ -21,6 +22,8 @@ laichとlaxを同じ条件で回し、結果を比較する
     laich_mask_info : laichのinputにかかれるpressやmoveの情報
 
     lax_mask_info : laxのinputにかかれるpressやmoveの情報
+
+    allowable_error : laxとlaichの結果に対する許容誤差
 
     md_config : laich,laxのconfigにかかれる
 """
@@ -38,5 +41,5 @@ if __name__ == '__main__':
     with open(md_config_path, "r") as f:
         config = yaml.safe_load(f)
 
-    lt = LaxTester(config)
-    lt.compare_lax_and_laich()
+    tester = LaxTester(config)
+    tester.run_test()
