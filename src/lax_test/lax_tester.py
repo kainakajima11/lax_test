@@ -28,9 +28,13 @@ class LaxTester:
             self.run_lax_and_laich(sf_lax, sf_laich) #実際にlaichとlaxを回します. 
             #2つの結果を読み込む
             sf_laich.import_dumppos(self.config["calc_dir"] / f"laich_calc/dump.pos.{self.config['md_config']['TotalStep']}")
+            laich_energies = self.get_energies_from_out(self.config["calc_dir"]/"laich_calc/out",
+                                                        self.config['md_config']['TotalStep'])
             sf_lax.import_dumppos(self.config["calc_dir"] / f"lax_calc/dump.pos.{self.config['md_config']['TotalStep']}")
+            lax_energies = self.get_energies_from_out(self.config["calc_dir"]/"lax_calc/out",
+                                                      self.config['md_config']['TotalStep'])
             #2つの結果を比較
-            self.compare_result(sf_lax, sf_laich, f"{loop}")
+            self.compare_result(sf_lax, lax_energies, sf_laich, laich_energies, f"{loop}")
             if loop != self.config["loop_num"] - 1:
                 subprocess.call(f"rm -r {self.config['calc_dir'] / 'packmol_tmp'}".split())
                 subprocess.call(f"rm -r {self.config['calc_dir'] / 'laich_calc'}".split())
@@ -43,7 +47,7 @@ class LaxTester:
         lax_testcases = glob.glob(f"{self.config['testcases_path']}/lax/*/*/config*") 
         laich_testcases = glob.glob(f"{self.config['testcases_path']}/laich/*/config*")
         # laichのtestcaseを回す。# dump.posを用意しとくだけでいいかも
-        answer = self.make_answer_by_laich(laich_testcases)
+        answer_atoms, answer_energies = self.make_answer_by_laich(laich_testcases)
         # laxのテストケースを一つずつ回していく.
         for testcase in lax_testcases:
             testcase = pathlib.Path(testcase)
@@ -51,9 +55,14 @@ class LaxTester:
                 continue
             subprocess.run(f"cp -r {testcase.parent} .".split())
             sf = self.run_lax_testcase(testcase)
+            energies: list[float] = self.get_energies_from_out(self.config['calc_dir']/testcase.parent.name/"out", 100)
             comment = f"MPI {testcase.parent.parent.name} : {testcase.parent.name}"
             # laichのanswerと比較
-            self.compare_result(sf, answer[testcase.parent.name], comment)
+            self.compare_result(sf,
+                                energies,
+                                answer_atoms[testcase.parent.name],
+                                answer_energies[testcase.parent.name],
+                                comment)
             subprocess.run(f"rm -r {testcase.parent.name}".split())
 
     def  check_and_set_config(self, config: Dict[str, Any]):
@@ -116,7 +125,9 @@ class LaxTester:
         sf_laich.import_dumppos(self.config["calc_dir"] / "prelax_calc/dump.pos.0")
         subprocess.call(f"rm -r {self.config['calc_dir'] / 'prelax_calc'}".split())
 
-    def run_lax_and_laich(self, sf_lax: SimulationFrame, sf_laich: SimulationFrame):
+    def run_lax_and_laich(self,
+                          sf_lax: SimulationFrame,
+                          sf_laich: SimulationFrame):
         """
         md_configの条件でlaxとlaichを回す
         """
@@ -144,7 +155,12 @@ class LaxTester:
             mask_info = self.config["lax_mask_info"],
         )
 
-    def compare_result(self, sf_lax: SimulationFrame, sf_laich: SimulationFrame, comment: str):
+    def compare_result(self,
+                       sf_lax: SimulationFrame,
+                       lax_energies: list[float],
+                       sf_laich: SimulationFrame,
+                       laich_energies: list[float],
+                       comment: str):
         """
         二つのsfを比較する。指定した許容誤差より誤差が大きければエラーを吐き終了する.
         """
@@ -159,9 +175,19 @@ class LaxTester:
             if self.config["allowable_error"][col] < val:
                 judge = False
         
+        energies_diff = [abs(lax - laich) for lax, laich in zip(lax_energies, laich_energies)]
+        for idx, energy in enumerate(["temp", "Kin_E", "Pot_E"]):
+            if not energy in self.config["allowable_error"]:
+                continue
+            if self.config["allowable_error"][energy] < energies_diff[idx]:
+                judge = False 
+        
         if not judge:
             print(f"Error {comment}")
             print(diff_max)
+            print(f"Temp             : {energies_diff[0]}")
+            print(f"Kinetic_energy   : {energies_diff[1]}"), 
+            print(f"Potential_energy : {energies_diff[2]}")
             exit()
         else: 
             print(f"Pass {comment}")
@@ -185,7 +211,8 @@ class LaxTester:
         """
         laichのテストケースを回す.
         """
-        answer: dict[SimulationFrame] = {}
+        answer_atoms: dict[str, SimulationFrame] = {}
+        answer_energies: dict[str, list[float]] = {}# list : [temperature, kinetic_energy, potential_energy, total_energy]
         for testcase in testcases:
             testcase = pathlib.Path(testcase)
             typ: str = testcase.parent.name
@@ -196,7 +223,26 @@ class LaxTester:
                 time.sleep(1)
             sf = SimulationFrame("C H O N Si")
             sf.import_dumppos(self.config["calc_dir"] / f"{typ}/dump.pos.100")
-            answer[typ] = sf
+            answer_atoms[typ] = sf
+            answer_energies[typ] = self.get_energies_from_out(self.config['calc_dir']/typ/"out", 100)
+            answer_energies[typ][1] *= 1 / 23.060553
+            # answer_energies[typ][2] *= 1 / 23.060553
             subprocess.run(f"rm -r {typ}".split())
-        return answer
-            
+        return answer_atoms, answer_energies
+    
+    def get_energies_from_out(self, ofp: str, last_step: int)->list[float]:
+        """
+        Laichやlaxのoutfileから
+        温度、運動エネルギー、ポテンシャルエネルギーを読み込む
+        """
+        energies = [None, None, None]
+        with open(ofp, "r") as f:
+            lines = f.readlines()
+            for line in lines:
+                spline = line.split()
+                if len(spline) == 0:
+                    continue
+                if spline[0] == str(last_step):
+                    energies = [float(spline[i+1]) for i in range(3)]
+                    break
+        return energies
