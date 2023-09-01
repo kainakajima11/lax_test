@@ -20,9 +20,10 @@ z: 0.0001,
 vx: 0.0001, # velocity
 vy: 0.0001,
 vz: 0.0001,
+cell: 0.01, # cell_size
 temp: 0.1, # temperature
 Kin_E: 0.01, # energy
-# Pot_E: 0.01,
+Pot_E: 0.01,
 }
 
 # run_lax_testのみ
