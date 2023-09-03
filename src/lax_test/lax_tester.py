@@ -51,8 +51,6 @@ class LaxTester:
         # laxのテストケースを一つずつ回していく.
         for testcase in lax_testcases:
             testcase = pathlib.Path(testcase)
-            if testcase.parent.name == "move" or testcase.parent.name == "press_move": # moveが完成していないため
-                continue
             subprocess.run(f"cp -r {testcase.parent} .".split())
             sf = self.run_lax_testcase(testcase)
             energies: list[float] = self.get_energies_from_out(self.config['calc_dir']/testcase.parent.name/"out", 100)
@@ -164,28 +162,43 @@ class LaxTester:
         """
         二つのsfを比較する。指定した許容誤差より誤差が大きければエラーを吐き終了する.
         """
+        judge = True
+
+        # sf.atoms
         atoms_diff = (sf_laich.atoms - sf_lax.atoms).abs()
         for i,dim in enumerate(["x", "y", "z"]):
             atoms_diff[dim] = [min(diff, math.fabs(diff-sf_lax.cell[i])) for diff in atoms_diff[dim]]
         diff_max = atoms_diff.max()
-        judge = True
+        
         for col, val in diff_max.items():
             if not col in self.config["allowable_error"]:
                 continue
             if self.config["allowable_error"][col] < val:
                 judge = False
-        
+
+        # sf.cell
+        cell_diff = [None,None,None]
+        for dim in range(3):
+            cell_diff[dim] = abs(sf_laich.cell[dim] - sf_lax.cell[dim])
+            if cell_diff[dim] > self.config["allowable_error"]["cell"]:
+                judge = False
+
+        # energy and temperature
         energies_diff = [abs(lax - laich) for lax, laich in zip(lax_energies, laich_energies)]
         for idx, energy in enumerate(["temp", "Kin_E", "Pot_E"]):
             if not energy in self.config["allowable_error"]:
                 continue
             if self.config["allowable_error"][energy] < energies_diff[idx]:
                 judge = False 
-        
+
+        # pass or (print and stop) 
         if not judge:
             print(f"Error {comment}")
             print(diff_max)
-            print(f"Temp             : {energies_diff[0]}")
+            print(f"Cell_X           : {cell_diff[0]}")
+            print(f"Cell_Y           : {cell_diff[1]}")
+            print(f"Cell_Z           : {cell_diff[2]}")
+            print(f"Temperature      : {energies_diff[0]}")
             print(f"Kinetic_energy   : {energies_diff[1]}"), 
             print(f"Potential_energy : {energies_diff[2]}")
             exit()
@@ -212,7 +225,7 @@ class LaxTester:
         laichのテストケースを回す.
         """
         answer_atoms: dict[str, SimulationFrame] = {}
-        answer_energies: dict[str, list[float]] = {}# list : [temperature, kinetic_energy, potential_energy, total_energy]
+        answer_energies: dict[str, list[float]] = {} # list : [temperature, kinetic_energy, potential_energy]
         for testcase in testcases:
             testcase = pathlib.Path(testcase)
             typ: str = testcase.parent.name
@@ -226,7 +239,7 @@ class LaxTester:
             answer_atoms[typ] = sf
             answer_energies[typ] = self.get_energies_from_out(self.config['calc_dir']/typ/"out", 100)
             answer_energies[typ][1] *= 1 / 23.060553
-            # answer_energies[typ][2] *= 1 / 23.060553
+            answer_energies[typ][2] *= 1 / 23.060553
             subprocess.run(f"rm -r {typ}".split())
         return answer_atoms, answer_energies
     
