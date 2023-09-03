@@ -9,7 +9,7 @@
 4 14.0067
 5 28.0855
 
-#fix 1 rigid x y -
+#move 1 x 0 y 0 - -
 #pressz 1 1 0
 
 #atoms 120
