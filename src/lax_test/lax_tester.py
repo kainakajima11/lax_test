@@ -51,6 +51,9 @@ class LaxTester:
         # laxのテストケースを一つずつ回していく.
         for testcase in lax_testcases:
             testcase = pathlib.Path(testcase)
+            if self.config["ignore_type"][testcase.parent.name] or self.config["ignore_mpi"][testcase.parent.parent.name]:
+                print(f"Ignored MPI {testcase.parent.parent.name} : {testcase.parent.name}")
+                continue
             subprocess.run(f"cp -r {testcase.parent} .".split())
             sf = self.run_lax_testcase(testcase)
             energies: list[float] = self.get_energies_from_out(self.config['calc_dir']/testcase.parent.name/"out", 100)
@@ -229,6 +232,8 @@ class LaxTester:
         for testcase in testcases:
             testcase = pathlib.Path(testcase)
             typ: str = testcase.parent.name
+            if self.config["ignore_type"][testcase.parent.name]:
+                continue
             subprocess.run(f"cp -r {testcase.parent} .".split())
             cmd = f"mpiexec.hydra -np 1 ~/Laich/src/build/laich {testcase.name} < /dev/null >& out"
             laich_process = subprocess.Popen(cmd, cwd = self.config["calc_dir"] / typ, shell = True)
