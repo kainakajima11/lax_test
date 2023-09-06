@@ -206,7 +206,7 @@ class LaxTester:
             print(f"Potential_energy : {energies_diff[2]}")
             exit()
         else: 
-            print(f"Pass {comment}")
+            print(f"Pass    {comment}")
 
     def run_lax_testcase(self, testcase: pathlib.Path)->SimulationFrame:
         """
