@@ -30,6 +30,8 @@ class LaxTester:
             sf_laich.import_dumppos(self.config["calc_dir"] / f"laich_calc/dump.pos.{self.config['md_config']['TotalStep']}")
             laich_energies = self.get_energies_from_out(self.config["calc_dir"]/"laich_calc/out",
                                                         self.config['md_config']['TotalStep'])
+            laich_energies[1] *= 1 / 23.060553
+            laich_energies[2] *= 1 / 23.060553
             sf_lax.import_dumppos(self.config["calc_dir"] / f"lax_calc/dump.pos.{self.config['md_config']['TotalStep']}")
             lax_energies = self.get_energies_from_out(self.config["calc_dir"]/"lax_calc/out",
                                                       self.config['md_config']['TotalStep'])
@@ -117,7 +119,7 @@ class LaxTester:
         sf_lax.lax(
             calc_dir = "prelax_calc",
             lax_config = pre_config,
-            lax_cmd = f"~{self.config['lax_path']}",
+            lax_cmd = self.config['lax_path'],
             print_lax = False,
             exist_ok = True,
         )
@@ -142,7 +144,7 @@ class LaxTester:
         sf_laich.laich(
             calc_dir = "laich_calc",
             laich_config = laich_config,
-            laich_cmd = f"~{self.config['lax_path']}",
+            laich_cmd = self.config['laich_path'],
             print_laich = False,
             exist_ok = True,
             mask_info = self.config["laich_mask_info"]
@@ -150,7 +152,7 @@ class LaxTester:
         sf_lax.lax(
             calc_dir = "lax_calc",
             lax_config = self.config["md_config"],
-            lax_cmd = f"~{self.config['lax_path']}",
+            lax_cmd = self.config['lax_path'],
             print_lax = False,
             exist_ok = True,
             mask_info = self.config["lax_mask_info"],
@@ -214,7 +216,7 @@ class LaxTester:
         mpi: int = int(testcase.parent.parent.name) # testcase/lax/mpi/typ/config*
         typ: str = testcase.parent.name
         num_process = int(mpi/100) * int((mpi%100)/10) * int(mpi%10)
-        cmd = f"mpiexec.hydra -np {num_process} ~{self.config['lax_path']} {testcase.name} < /dev/null >& out"
+        cmd = f"mpiexec.hydra -np {num_process} {self.config['lax_path']} {testcase.name} < /dev/null >& out"
         lax_process = subprocess.Popen(cmd, cwd = self.config["calc_dir"] / typ, shell = True)
         while lax_process.poll() is None:
             time.sleep(1)
@@ -234,7 +236,7 @@ class LaxTester:
             if self.config["ignore_type"][testcase.parent.name]:
                 continue
             subprocess.run(f"cp -r {testcase.parent} .".split())
-            cmd = f"mpiexec.hydra -np 1 ~{self.config['laich_path']} {testcase.name} < /dev/null >& out"
+            cmd = f"mpiexec.hydra -np 1 {self.config['laich_path']} {testcase.name} < /dev/null >& out"
             laich_process = subprocess.Popen(cmd, cwd = self.config["calc_dir"] / typ, shell = True)
             while laich_process.poll() is None:
                 time.sleep(1)
