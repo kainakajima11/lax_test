@@ -94,6 +94,8 @@ ignore_mpi: { # Trueならばtestしない
 "222": True,
 "333": True,
 }
+
+NNPModelPath: /nfshome17/knakajima/vasp_work/train/H2O_density1.0/frozen_models/allegro_frozen_229000.pth
 ```
 md_config.yamlを用意したら<br>
 run_lax_test.pyの場合
