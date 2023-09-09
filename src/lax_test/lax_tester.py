@@ -57,6 +57,8 @@ class LaxTester:
                 print(f"Ignored MPI {testcase.parent.parent.name} : {testcase.parent.name}")
                 continue
             subprocess.run(f"cp -r {testcase.parent} .".split())
+            with open(f"{testcase.parent.name}/{testcase.name}", "a") as f:
+                f.write(f"\nNNPModelPath {self.config['NNPModelPath']}")
             sf = self.run_lax_testcase(testcase)
             energies: list[float] = self.get_energies_from_out(self.config['calc_dir']/testcase.parent.name/"out", 100)
             comment = f"MPI {testcase.parent.parent.name} : {testcase.parent.name}"
@@ -236,6 +238,8 @@ class LaxTester:
             if self.config["ignore_type"][testcase.parent.name]:
                 continue
             subprocess.run(f"cp -r {testcase.parent} .".split())
+            with open(f"{testcase.parent.name}/{testcase.name}", "a") as f:
+                f.write(f"\nNNPModelPath {self.config['NNPModelPath']}")
             cmd = f"mpiexec.hydra -np 1 {self.config['laich_path']} {testcase.name} < /dev/null >& out"
             laich_process = subprocess.Popen(cmd, cwd = self.config["calc_dir"] / typ, shell = True)
             while laich_process.poll() is None:
