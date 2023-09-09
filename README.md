@@ -13,6 +13,8 @@ md_config.yamlを用意します.
 ```
 # 共通部分
 calc_dir: /nfshome17/knakajima/vasp_work/lax/lax_tester/ # 計算を実行する場所
+lax_path: /lax/src/build/lax # laxのpath # 絶対パスで/から始めてください
+laich_path: /Laich/src/build/laich # laichのpath # 絶対パスで/から始めてください
 allowable_error: { # 許容誤差
 x: 0.0001, # position
 y: 0.0001,
@@ -74,6 +76,24 @@ NNPFlagCalculateForce: 1,
 
 # run_lax_testcasesのみ
 testcases_path: /nfshome17/knakajima/lax_test/src/testcase # lax_test内のtestcase dir
+
+ignore_type: { # Trueならばtestしない
+fix: True,
+move: True,
+press_fix: True,
+press_move: True,
+simple: False,
+npt_berendsen: False,
+}
+
+ignore_mpi: { # Trueならばtestしない
+"111": False,
+"112": True,
+"121": True,
+"211": True,
+"222": True,
+"333": True,
+}
 ```
 md_config.yamlを用意したら<br>
 run_lax_test.pyの場合
