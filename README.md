@@ -13,8 +13,8 @@ md_config.yamlを用意します.
 ```
 # 共通部分
 calc_dir: /nfshome17/knakajima/vasp_work/lax/lax_tester/ # 計算を実行する場所
-lax_path: /lax/src/build/lax # laxのpath # 絶対パスで/から始めてください
-laich_path: /Laich/src/build/laich # laichのpath # 絶対パスで/から始めてください
+lax_path: /lax/src/build/lax # laxのpath # 絶対パスで~から始めてください
+laich_path: /Laich/src/build/laich # laichのpath # 絶対パスで~から始めてください
 allowable_error: { # 許容誤差
 x: 0.0001, # position
 y: 0.0001,
