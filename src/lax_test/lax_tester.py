@@ -117,7 +117,7 @@ class LaxTester:
         sf_lax.lax(
             calc_dir = "prelax_calc",
             lax_config = pre_config,
-            lax_cmd = "~/lax/src/build/lax",
+            lax_cmd = f"~{self.config['lax_path']}",
             print_lax = False,
             exist_ok = True,
         )
@@ -142,7 +142,7 @@ class LaxTester:
         sf_laich.laich(
             calc_dir = "laich_calc",
             laich_config = laich_config,
-            laich_cmd = "~/Laich/src/build/laich",
+            laich_cmd = f"~{self.config['lax_path']}",
             print_laich = False,
             exist_ok = True,
             mask_info = self.config["laich_mask_info"]
@@ -150,7 +150,7 @@ class LaxTester:
         sf_lax.lax(
             calc_dir = "lax_calc",
             lax_config = self.config["md_config"],
-            lax_cmd = "~/lax/src/build/lax",
+            lax_cmd = f"~{self.config['lax_path']}",
             print_lax = False,
             exist_ok = True,
             mask_info = self.config["lax_mask_info"],
@@ -193,7 +193,6 @@ class LaxTester:
                 continue
             if self.config["allowable_error"][energy] < energies_diff[idx]:
                 judge = False 
-
         # pass or (print and stop) 
         if not judge:
             print(f"Error {comment}")
@@ -215,7 +214,7 @@ class LaxTester:
         mpi: int = int(testcase.parent.parent.name) # testcase/lax/mpi/typ/config*
         typ: str = testcase.parent.name
         num_process = int(mpi/100) * int((mpi%100)/10) * int(mpi%10)
-        cmd = f"mpiexec.hydra -np {num_process} ~/lax/src/build/lax {testcase.name} < /dev/null >& out"
+        cmd = f"mpiexec.hydra -np {num_process} ~{self.config['lax_path']} {testcase.name} < /dev/null >& out"
         lax_process = subprocess.Popen(cmd, cwd = self.config["calc_dir"] / typ, shell = True)
         while lax_process.poll() is None:
             time.sleep(1)
@@ -235,7 +234,7 @@ class LaxTester:
             if self.config["ignore_type"][testcase.parent.name]:
                 continue
             subprocess.run(f"cp -r {testcase.parent} .".split())
-            cmd = f"mpiexec.hydra -np 1 ~/Laich/src/build/laich {testcase.name} < /dev/null >& out"
+            cmd = f"mpiexec.hydra -np 1 ~{self.config['laich_path']} {testcase.name} < /dev/null >& out"
             laich_process = subprocess.Popen(cmd, cwd = self.config["calc_dir"] / typ, shell = True)
             while laich_process.poll() is None:
                 time.sleep(1)
