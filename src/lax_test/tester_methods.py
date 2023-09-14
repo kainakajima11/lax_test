@@ -1,31 +1,49 @@
-import math
 import numpy as np
+from typing import Union, Any
+import pathlib
 from .md_info import MDInfo
 
 class TesterMethods:
 
-    atoms_diff: dict[str, float]
-    cell_diff: np.array[float]
-    energy_diff: list[float]
-
     def __init__(self):
         pass
 
-    def get_energy_from_out(self)->list[float]:
+    def set_md_config(self, id: int):
+        config: dict[str, Any] = {}
+        for col, lst in self.config["md_config"].items():
+            if len(lst) == 1:
+                config[col] = lst[0]
+            else:
+                config[col] = lst[id]
+        
+        return config
+
+    def get_energy_from_out(self, ofp: Union[str, pathlib.Path], md: MDInfo)->list[float]:
         """
         lax(laich) のoutfile から,
         エネルギー、温度を抜き取る 
         """
-        pass
+        with open(ofp, "r") as f:
+            lines = f.readlines()
+            for line in lines:
+                spline = line.split()
+                if len(spline) == 0:
+                    continue
+                if spline[0] == str(md.config["TotalStep"]):
+                    energies = np.array([float(spline[i+1]) for i in range(3)])
+                    break
+        return energies
 
     def check_atoms_diff(self)->bool:
         """
         sf.atomsを比較する
         """
-        for col in self.laich.atoms:
-            self.atoms_diff[col] = 1e9
+        self.atoms_diff = {}
+        for col in ["x", "y", "z", "vx", "vy", "vz"]:
+            self.atoms_diff[col] = 0
             diffs = (self.laich.atoms[col] - self.lax.atoms[col]).abs()
-            self.atoms_diff[col] = [max(diff, self.atoms_diff[col]) for diff in diffs]
+            for diff in diffs:
+                self.atoms_diff[col] = max(diff, self.atoms_diff[col])
 
         atoms_judge = True
         for col, val in self.atoms_diff.items():
@@ -65,8 +83,23 @@ class TesterMethods:
 
         return energy_judge
 
-    def print_result(self, md: MDInfo, judge: bool):
+    def print_result(self, md: MDInfo, omp: int, mpi: int, judge: bool):
         """
         laichとlaxを比較した結果を出力する
         """
-        pass
+        if judge:
+            print(f"Pass : {md.name}, OMP : {omp}, MPI : {mpi}", flush=True)
+        else:
+            print(f"Error : {md.name}, OMP : {omp}, MPI : {mpi}", flush=True)
+            print("---------------------------------------", flush=True)
+            print(f"X                : {self.atoms_diff['x']}", flush = True)
+            print(f"Y                : {self.atoms_diff['y']}", flush = True)
+            print(f"Z                : {self.atoms_diff['z']}", flush = True)
+            print(f"V_X              : {self.atoms_diff['vx']}", flush = True)
+            print(f"V_Y              : {self.atoms_diff['vy']}", flush = True)
+            print(f"V_Z              : {self.atoms_diff['vz']}", flush = True)
+            print(f"Cell             : {self.cell_diff}", flush = True)
+            print(f"Temperature      : {self.energy_diff[0]}", flush = True)
+            print(f"Kinetic_energy   : {self.energy_diff[1]}", flush = True)
+            print(f"Potential_energy : {self.energy_diff[2]}", flush = True)
+            print("---------------------------------------", flush = True)

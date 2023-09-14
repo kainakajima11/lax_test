@@ -1,7 +1,7 @@
 from .lax_tester import LaxTester
-from .tester_methods import TesterMethods
-from .md_info import MDInfo
+from .new_lax_tester import NewLaxTester
 
 __all__ = [
     "LaxTester"
+    "NewLaxTester"
 ]
