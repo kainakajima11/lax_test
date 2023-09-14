@@ -1,23 +1,28 @@
+import numpy as np
 from typing import Any
-from copy import deepcopy
+import numpy.typing as npt
 import pathlib
+from copy import deepcopy
 from limda import SimulationFrame
 from .tester_methods import TesterMethods
 from .md_info import MDInfo
 
-class LaxTester(TesterMethods):
+class NewLaxTester(TesterMethods):
     config: dict[str, Any]
-    lax: SimulationFrame
-    lax_energy: list[float]
     laich: SimulationFrame
-    laich_energy: list[float]
+    laich_energy: npt.NDArray[np.float64]
+    lax: SimulationFrame
+    lax_energy: npt.NDArray[np.float64]
+    atoms_diff: dict[str, float]
+    cell_diff: npt.NDArray[np.float64]
+    energy_diff: npt.NDArray[np.float64]
 
     def __init__(self, config: dict[str ,Any]):
         self.config: dict[str, Any] = config
 
     def run_lax_test(self):
         # testのconfigをcheck
-        self.check_and_set_config(self.config)
+        self.check_and_set_config()
 
         # 実行するmdのlistを作成
         md_list = self.get_md_list()
@@ -36,7 +41,7 @@ class LaxTester(TesterMethods):
                 self.calculate_by_lax(md, omp, mpi)
 
                 # 結果を比較
-                self.compare_result(md)
+                self.compare_result(md, omp, mpi)
     
     def check_and_set_config(self):
         """
@@ -45,15 +50,26 @@ class LaxTester(TesterMethods):
         また入力がなかった部分にdefault値をsetする.
         """
         cf = self.config
-        assert cf["mode"] == "own", "Inappropriate mode" #  or cf["mode"] == "testcase" or cf["mode"] == "random" # todo
+        assert cf["mode"] == "own" #  or cf["mode"] == "testcase" or cf["mode"] == "random" # todo
+
+        # laich calc path
+        if not cf["laich_calc_dir"]:
+            cf["laich_calc_dir"] = "laich_calc"
+        cf["laich_calc_dir"] = pathlib.Path(cf["laich_calc_dir"])
+
+        # lax calc path
+        if not cf["lax_calc_dir"]:
+            cf["lax_calc_dir"] = "lax_calc"
+        cf["lax_calc_dir"] = pathlib.Path(cf["lax_calc_dir"])
 
         # own
         if cf["mode"] == "own":
             # check input_paths, input_names
             assert cf["input_paths"]
+            input_len = len(cf["input_paths"])
             if not cf["input_names"]:
                 cf["input_names"] = [i for i, _ in enumerate(cf["input_paths"])]
-            assert len(cf["input_paths"]) == len(cf["input_names"])
+            assert input_len == len(cf["input_names"])
 
             # mask_info, mask_info_names
             if not cf["mask_info"]:
@@ -62,13 +78,25 @@ class LaxTester(TesterMethods):
                 cf["mask_info_names"] = [i for i, _ in enumerate(cf["mask_info"])]
             assert len(cf["mask_info"]) == len(cf["mask_info_names"])
 
-            # omp, mpi
+            # omp
             if not cf["OMPGrid"]:
                 cf["OMPGrid"] = [111]
+            for omp in cf["OMPGrid"]:
+                assert 99 < omp and omp < 1000
+                assert str(omp)[0] != "0" and str(omp)[1] != "0" and str(omp)[2] != "0" 
+
+            # mpi
             if not cf["MPIGrid"]:
                 cf["MPIGrid"] = [111]
+            for mpi in cf["MPIGrid"]:
+                assert 99 < mpi and mpi < 1000
+                assert str(mpi)[0] != "0" and str(mpi)[1] != "0" and str(mpi)[2] != "0"
             
-    
+            # md_config
+            assert cf["md_config"]
+            for lst in cf["md_config"].values():
+                assert len(lst) == 1 or len(lst) == input_len
+
     def get_md_list(self)->list[MDInfo]:
         """
         計算を実行するmdのリストを作成する.
@@ -76,12 +104,12 @@ class LaxTester(TesterMethods):
         """
         md_list = []
         for mask_info, mask_info_name in zip(self.config["mask_info"], self.config["mask_info_names"]):
-            for i, input_path, input_name in enumerate(zip(self.config["input_paths"], self.config["input_names"])):
-                md = MDInfo(self.config["para"][i],
+            for input_id, [input_path, input_name] in enumerate(zip(self.config["input_paths"], self.config["input_names"])):
+                md = MDInfo(self.config["para"][input_id],
                             input_path,
                             mask_info,
-                            self.config["md_config"],
                             f"{input_name}_{mask_info_name}")
+                md.config = self.set_md_config(input_id)
                 md_list.append(md)
         return md_list
     
@@ -93,17 +121,24 @@ class LaxTester(TesterMethods):
         """
         self.laich = SimulationFrame()
         self.laich.import_para_from_list(md.para)
+        self.laich.import_input(md.input_path)
         laich_md = deepcopy(md)
-        self.set_laich(laich_md)
+        laich_md.set_laich()
         self.laich.laich(calc_dir = self.config["laich_calc_dir"] / laich_md.name,
                          laich_config = laich_md.config,
                          print_laich = True,
                          exist_ok = True,
-                         laich_cmd = self.config["laich_dir"],
+                         laich_cmd = self.config["laich_cmd"],
                          mask_info = laich_md.mask_info,
                          )
+        self.laich.import_dumppos(self.config["laich_calc_dir"] / f"{laich_md.name}" / f"dump.pos.{laich_md.config['TotalStep']}")
         # 結果からenergyを抜き取る
-        self.laich_energy = self.get_energy_from_out()
+        self.laich_energy = \
+            self.get_energy_from_out(self.config["laich_calc_dir"] / laich_md.name / "out",
+                                     md)
+        # unit adjustment
+        self.laich_energy[1] *= 1 / 23.060553
+        self.laich_energy[2] *= 1 / 23.060553
 
     def calculate_by_lax(self, md: MDInfo, omp: int, mpi: int):
         """
@@ -113,23 +148,27 @@ class LaxTester(TesterMethods):
         """
         self.lax = SimulationFrame()
         self.lax.import_para_from_list(md.para)
-        self.set_lax(md, omp, mpi)
+        self.lax.import_input(md.input_path)
+        md.set_lax(omp, mpi)
         self.lax.lax(calc_dir = self.config["lax_calc_dir"] / f"{md.name}_{mpi}_{mpi}",
                      lax_config = md.config,
                      print_lax = True,
                      exist_ok = True,
-                     lax_cmd = self.config["lax_dir"],
+                     lax_cmd = self.config["lax_cmd"],
                      mask_info = md.mask_info
                      )
+        self.lax.import_dumppos(self.config["lax_calc_dir"] / f"{md.name}_{mpi}_{mpi}" / f"dump.pos.{md.config['TotalStep']}")
         # 結果からenergyを抜き取る
-        self.lax_energy = self.get_energy_from_out()
+        self.lax_energy = \
+            self.get_energy_from_out(self.config["lax_calc_dir"] / f"{md.name}_{mpi}_{mpi}" / "out",
+                                     md)
 
-    def compare_result(self, md):
+    def compare_result(self, md: MDInfo, omp: int, mpi: int):
         """
         self.laichとself.lax,
         self.laich_energyとself.lax_energyを比較する.
         """
-        judge = True
+        judge = True 
         # sf.atoms 
         if not self.check_atoms_diff():
             judge = False
@@ -143,4 +182,4 @@ class LaxTester(TesterMethods):
             judge = False
 
         # print
-        self.print_result(md, judge)
+        self.print_result(md, omp, mpi, judge)
