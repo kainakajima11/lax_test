@@ -13,7 +13,7 @@ MPIGridZ 1
 CUTOFF 3.4
 MARGIN 1.0
 GhostFactor 20.0
-NNPModelPath /nfshome17/knakajima/vasp_work/train/H2O_density1.0/frozen_models/allegro_frozen_229000.pth
+
 OMPGridX 1
 OMPGridY 1
 OMPGridZ 1
