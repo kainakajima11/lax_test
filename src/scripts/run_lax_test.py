@@ -3,7 +3,7 @@
 import yaml
 import argparse
 import pathlib
-from lax_test import LaxTester
+from lax_test import OldLaxTester
 from limda import SimulationFrame
 
 # run lax test
@@ -41,5 +41,5 @@ if __name__ == '__main__':
     with open(md_config_path, "r") as f:
         config = yaml.safe_load(f)
 
-    tester = LaxTester(config)
+    tester = OldLaxTester(config)
     tester.run_test()
