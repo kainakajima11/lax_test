@@ -1,271 +1,195 @@
-from typing import Dict,Any
 import numpy as np
-import math
-import time
+from typing import Any
+import numpy.typing as npt
 import pathlib
-import subprocess
-import glob
-import yaml
+from copy import deepcopy
 from limda import SimulationFrame
-from limda import SimulationFrames
+from .tester_methods import TesterMethods
+from .md_info import MDInfo
 
-class LaxTester:
-    def __init__(
-        self,
-        config: dict[str, Any]
-    ):
-        self.check_and_set_config(config)
+class LaxTester(TesterMethods):
+    config: dict[str, Any]
+    laich: SimulationFrame
+    laich_energy: npt.NDArray[np.float64]
+    lax: SimulationFrame
+    lax_energy: npt.NDArray[np.float64]
+    atoms_diff: dict[str, float]
+    cell_diff: npt.NDArray[np.float64]
+    energy_diff: npt.NDArray[np.float64]
+
+    def __init__(self, config: dict[str ,Any]):
         self.config: dict[str, Any] = config
 
-    def run_test(self):
-        #configで指定された条件でmdを回し、laichと比較する
-
-        for loop in range(self.config["loop_num"]):
-            sf_lax = SimulationFrame("C H O N Si")
-            self.random_pack(sf_lax) # 水原子をsfに詰めます。
-            sf_laich = SimulationFrame("C H O N Si")
-            self.set_input_with_velocity(sf_lax, sf_laich) # 初期速度を持ったinputを作成
-            self.run_lax_and_laich(sf_lax, sf_laich) #実際にlaichとlaxを回します. 
-            #2つの結果を読み込む
-            sf_laich.import_dumppos(self.config["calc_dir"] / f"laich_calc/dump.pos.{self.config['md_config']['TotalStep']}")
-            laich_energies = self.get_energies_from_out(self.config["calc_dir"]/"laich_calc/out",
-                                                        self.config['md_config']['TotalStep'])
-            laich_energies[1] *= 1 / 23.060553
-            laich_energies[2] *= 1 / 23.060553
-            sf_lax.import_dumppos(self.config["calc_dir"] / f"lax_calc/dump.pos.{self.config['md_config']['TotalStep']}")
-            lax_energies = self.get_energies_from_out(self.config["calc_dir"]/"lax_calc/out",
-                                                      self.config['md_config']['TotalStep'])
-            #2つの結果を比較
-            self.compare_result(sf_lax, lax_energies, sf_laich, laich_energies, f"{loop}")
-            if loop != self.config["loop_num"] - 1:
-                subprocess.call(f"rm -r {self.config['calc_dir'] / 'packmol_tmp'}".split())
-                subprocess.call(f"rm -r {self.config['calc_dir'] / 'laich_calc'}".split())
-                subprocess.call(f"rm -r {self.config['calc_dir'] / 'lax_calc'}".split())
-
-    def run_testcases(self):
-        # 用意してあるテストケースもmdを回し,laichと比較する
-
-        # testcaseの読み込み
-        lax_testcases = glob.glob(f"{self.config['testcases_path']}/lax/*/*/config*") 
-        laich_testcases = glob.glob(f"{self.config['testcases_path']}/laich/*/config*")
-        # laichのtestcaseを回す。# dump.posを用意しとくだけでいいかも
-        answer_atoms, answer_energies = self.make_answer_by_laich(laich_testcases)
-        # laxのテストケースを一つずつ回していく.
-        for testcase in lax_testcases:
-            testcase = pathlib.Path(testcase)
-            if self.config["ignore_type"][testcase.parent.name] or self.config["ignore_mpi"][testcase.parent.parent.name]:
-                print(f"Ignored MPI {testcase.parent.parent.name} : {testcase.parent.name}")
-                continue
-            subprocess.run(f"cp -r {testcase.parent} .".split())
-            with open(f"{testcase.parent.name}/{testcase.name}", "a") as f:
-                f.write(f"\nNNPModelPath {self.config['NNPModelPath']}")
-            sf = self.run_lax_testcase(testcase)
-            energies: list[float] = self.get_energies_from_out(self.config['calc_dir']/testcase.parent.name/"out", 100)
-            comment = f"MPI {testcase.parent.parent.name} : {testcase.parent.name}"
-            # laichのanswerと比較
-            self.compare_result(sf,
-                                energies,
-                                answer_atoms[testcase.parent.name],
-                                answer_energies[testcase.parent.name],
-                                comment)
-            subprocess.run(f"rm -r {testcase.parent.name}".split())
-
-    def  check_and_set_config(self, config: Dict[str, Any]):
+    def run_lax_test(self):
         """
-        md_configのcheck
+        laxのtestを実行する
         """
-        assert "calc_dir" in config,"calc_dirを指定してください"
-        config["calc_dir"] = pathlib.Path(config["calc_dir"])
+        # testのconfigをcheck
+        self.check_and_set_config()
 
-        if "loop_num" not in config:
-            config["loop_num"]: int = 10
-        
-        if "cell" not in config:
-            config["cell"]: np.array[float] = np.array([20,20,20])
+        # make dir
+        self.config["calc_dir"].mkdir()
+        pathlib.Path(self.config["calc_dir"] / "laich").mkdir()
+        pathlib.Path(self.config["calc_dir"] / "lax").mkdir()
+        if "set_initial_velocity" in self.config:
+            pathlib.Path(self.config["calc_dir"] / "initial_velo").mkdir()
 
-        if "pack_num" not in config:
-            config["pack_num"]: int = 30
+        # 実行するmdのlistを作成
+        md_list = self.get_md_list()
 
-        if "laich_mask_info" not in config:
-            config["laich_mask_info"]: list[str] = None
+        # mdを実行、比較
+        for md in md_list:
+            # laich
+            self.calculate_by_laich(md)
+
+            #lax
+            for omp, mpi in zip(self.config["OMPGrid"], self.config["MPIGrid"]):
+                self.calculate_by_lax(md, omp, mpi)
+
+                # 結果を比較
+                self.compare_result(md, omp, mpi)
     
-        if "lax_mask_info" not in config:
-            config["lax_mask_info"]: list[str] = None
-
-        config["md_config"]["TotalStep"] -= config["md_config"]["TotalStep"] % config["md_config"]["FileStep"]
-
-        config["md_config"]["ReadVelocity"] = 1
-
-    def random_pack(self, sf_lax: SimulationFrame):
+    def check_and_set_config(self):
         """
-        packmolで水原子のランダムな配置を作成
+        tester_configが必要な情報を含んでないかや、
+        不適切な形式でないかcheckする。
+        また入力がなかった部分にdefault値をsetする.
         """
-        sf_lax.cell = self.config["cell"]
-        sf_H2O = SimulationFrame("C H O N Si")
-        sf_H2O.import_mol('H2O') # 水分子のデータを読み込む
-        xyz_condition = [
-            [0.7, 0.7, 0.7, sf_lax.cell[0] - 0.7, sf_lax.cell[1] - 0.7, sf_lax.cell[2] - 0.7],
-        ]
-        sf_lax.packmol(sf_list=[sf_H2O,],
-                pack_num_list=[self.config["pack_num"],],
-                tolerance=1.7, # それぞれの水分子は最低1.7Å離れて配置される
-                xyz_condition=xyz_condition, seed=-1) # seed=-1とすると、シードはランダム
+        cf = self.config
+        assert cf["mode"] == "own" #  or cf["mode"] == "testcase" or cf["mode"] == "random" # todo
+
+        # calc_path
+        if not cf["calc_dir"]:
+            cf["calc_dir"] = "lax_test_calc"
+        cf["calc_dir"] = pathlib.Path(cf["calc_dir"])
+
+        # own
+        if cf["mode"] == "own":
+            # check input_paths, input_names
+            assert cf["input_paths"]
+            input_len = len(cf["input_paths"])
+            if not cf["input_names"]:
+                cf["input_names"] = [i for i, _ in enumerate(cf["input_paths"])]
+            assert input_len == len(cf["input_names"])
+
+            # mask_info, mask_info_names
+            if not cf["mask_info"]:
+                cf["mask_info"] = [[]]
+            if not cf["mask_info_names"]:
+                cf["mask_info_names"] = [i for i, _ in enumerate(cf["mask_info"])]
+            assert len(cf["mask_info"]) == len(cf["mask_info_names"])
+
+            # omp
+            if not cf["OMPGrid"]:
+                cf["OMPGrid"] = [111]
+            for omp in cf["OMPGrid"]:
+                assert 99 < omp and omp < 1000
+                assert str(omp)[0] != "0" and str(omp)[1] != "0" and str(omp)[2] != "0" 
+
+            # mpi
+            if not cf["MPIGrid"]:
+                cf["MPIGrid"] = [111]
+            for mpi in cf["MPIGrid"]:
+                assert 99 < mpi and mpi < 1000
+                assert str(mpi)[0] != "0" and str(mpi)[1] != "0" and str(mpi)[2] != "0"
+            
+            # md_config
+            assert cf["md_config"]
+            for lst in cf["md_config"].values():
+                assert len(lst) == 1 or len(lst) == input_len
+
+            # set_initial_velocity
+            if not "set_initial_velocity" in cf:
+                cf["set_initial_velocity"] = 0
+
+    def get_md_list(self)->list[MDInfo]:
+        """
+        計算を実行するmdのリストを作成する.
+        リストはMDに関する情報を持つMDInfoを要素とする.
+        """
+        md_list = []
+        for mask_info, mask_info_name in zip(self.config["mask_info"], self.config["mask_info_names"]):
+            for input_id, [input_path, input_name] in enumerate(zip(self.config["input_paths"], self.config["input_names"])):
+                md = MDInfo(self.config["para"][input_id],
+                            input_path,
+                            mask_info,
+                            f"{input_name}_{mask_info_name}",
+                            self.config["md_config"],
+                            input_id)
+
+                if self.config["set_initial_velocity"]:
+                    self.set_initial_velocity(md)
+
+                md_list.append(md)
+        return md_list
         
-    def set_input_with_velocity(self, sf_lax: SimulationFrame, sf_laich: SimulationFrame):
+    def calculate_by_laich(self, md: MDInfo):
         """
-        短時間でmdを回し、速度を持ったsfを作成
+        laichによってMDを実行する.
+        計算後、構造がsfとしてself.laichに
+        エネルギーや温度がlist[float]としてself.laich_energyに入る
         """
-        pre_config = self.config["md_config"].copy()
-        pre_config["TotalStep"] = 1
-        pre_config["ReadVelocity"] = 0
-        sf_lax.lax(
-            calc_dir = "prelax_calc",
-            lax_config = pre_config,
-            lax_cmd = self.config['lax_path'],
-            print_lax = False,
-            exist_ok = True,
-        )
-        sf_lax = SimulationFrame("C H O N Si")
-        sf_lax.import_dumppos(self.config["calc_dir"] / "prelax_calc/dump.pos.0")
-        sf_laich.import_dumppos(self.config["calc_dir"] / "prelax_calc/dump.pos.0")
-        subprocess.call(f"rm -r {self.config['calc_dir'] / 'prelax_calc'}".split())
+        self.laich = SimulationFrame()
+        self.laich.import_para_from_list(md.para)
+        self.laich.import_file(md.input_path)
+        laich_md = deepcopy(md)
+        laich_md.set_laich()
+        self.laich.laich(calc_dir = self.config["calc_dir"] / "laich" / laich_md.name,
+                         laich_config = laich_md.config,
+                         print_laich = True,
+                         exist_ok = True,
+                         laich_cmd = self.config["laich_cmd"],
+                         mask_info = laich_md.mask_info,
+                         )
+        self.laich.import_dumppos(self.config["calc_dir"] / "laich" / f"{laich_md.name}" / f"dump.pos.{laich_md.config['TotalStep']}")
+        # 結果からenergyを抜き取る
+        self.laich_energy = \
+            self.get_energy_from_out(self.config["calc_dir"] / "laich" / laich_md.name / "out",
+                                     md)
+        # unit adjustment
+        self.laich_energy[1] *= 1 / 23.060553
+        self.laich_energy[2] *= 1 / 23.060553
 
-    def run_lax_and_laich(self,
-                          sf_lax: SimulationFrame,
-                          sf_laich: SimulationFrame):
+    def calculate_by_lax(self, md: MDInfo, omp: int, mpi: int):
         """
-        md_configの条件でlaxとlaichを回す
+        laxによってMDを実行する.
+        計算後、構造がsfとしてself.laxに
+        エネルギーや温度がlist[float]としてself.lax_energyに入る
         """
-        sf_lax.atoms["mask"] = [i%2 for i in range(len(sf_lax))]
-        sf_laich.atoms["mask"] = [i%2 for i in range(len(sf_lax))]
+        self.lax = SimulationFrame()
+        self.lax.import_para_from_list(md.para)
+        self.lax.import_file(md.input_path)
+        md.set_lax(omp, mpi)
+        self.lax.lax(calc_dir = self.config["calc_dir"] / "lax" / f"{md.name}_{omp}_{mpi}",
+                     lax_config = md.config,
+                     print_lax = True,
+                     exist_ok = True,
+                     lax_cmd = self.config["lax_cmd"],
+                     mask_info = md.mask_info
+                     )
+        self.lax.import_dumppos(self.config["calc_dir"] / "lax" / f"{md.name}_{omp}_{mpi}" / f"dump.pos.{md.config['TotalStep']}")
+        # 結果からenergyを抜き取る
+        self.lax_energy = \
+            self.get_energy_from_out(self.config["calc_dir"] / "lax" / f"{md.name}_{omp}_{mpi}" / "out",
+                                     md)
 
-        laich_config = self.config["md_config"].copy()
-        laich_config["MPIGridX"] = 1
-        laich_config["MPIGridY"] = 1
-        laich_config["MPIGridZ"] = 1
-        sf_laich.laich(
-            calc_dir = "laich_calc",
-            laich_config = laich_config,
-            laich_cmd = self.config['laich_path'],
-            print_laich = False,
-            exist_ok = True,
-            mask_info = self.config["laich_mask_info"]
-        )
-        sf_lax.lax(
-            calc_dir = "lax_calc",
-            lax_config = self.config["md_config"],
-            lax_cmd = self.config['lax_path'],
-            print_lax = False,
-            exist_ok = True,
-            mask_info = self.config["lax_mask_info"],
-        )
-
-    def compare_result(self,
-                       sf_lax: SimulationFrame,
-                       lax_energies: list[float],
-                       sf_laich: SimulationFrame,
-                       laich_energies: list[float],
-                       comment: str):
+    def compare_result(self, md: MDInfo, omp: int, mpi: int):
         """
-        二つのsfを比較する。指定した許容誤差より誤差が大きければエラーを吐き終了する.
+        self.laichとself.lax,
+        self.laich_energyとself.lax_energyを比較する.
         """
-        judge = True
-
-        # sf.atoms
-        atoms_diff = (sf_laich.atoms - sf_lax.atoms).abs()
-        for i,dim in enumerate(["x", "y", "z"]):
-            atoms_diff[dim] = [min(diff, math.fabs(diff-sf_lax.cell[i])) for diff in atoms_diff[dim]]
-        diff_max = atoms_diff.max()
+        judge = True 
+        # sf.atoms 
+        if not self.check_atoms_diff():
+            judge = False
         
-        for col, val in diff_max.items():
-            if not col in self.config["allowable_error"]:
-                continue
-            if self.config["allowable_error"][col] < val:
-                judge = False
-
         # sf.cell
-        cell_diff = [None,None,None]
-        for dim in range(3):
-            cell_diff[dim] = abs(sf_laich.cell[dim] - sf_lax.cell[dim])
-            if cell_diff[dim] > self.config["allowable_error"]["cell"]:
-                judge = False
+        if not self.check_cell_diff():
+            judge = False
+        
+        # energy
+        if not self.check_energy_diff():
+            judge = False
 
-        # energy and temperature
-        energies_diff = [abs(lax - laich) for lax, laich in zip(lax_energies, laich_energies)]
-        for idx, energy in enumerate(["temp", "Kin_E", "Pot_E"]):
-            if not energy in self.config["allowable_error"]:
-                continue
-            if self.config["allowable_error"][energy] < energies_diff[idx]:
-                judge = False 
-        # pass or (print and stop) 
-        if not judge:
-            print(f"Error {comment}")
-            print(diff_max)
-            print(f"Cell_X           : {cell_diff[0]}")
-            print(f"Cell_Y           : {cell_diff[1]}")
-            print(f"Cell_Z           : {cell_diff[2]}")
-            print(f"Temperature      : {energies_diff[0]}")
-            print(f"Kinetic_energy   : {energies_diff[1]}"), 
-            print(f"Potential_energy : {energies_diff[2]}")
-            exit()
-        else: 
-            print(f"Pass    {comment}")
-
-    def run_lax_testcase(self, testcase: pathlib.Path)->SimulationFrame:
-        """
-        laxのテストケースを回す
-        """
-        mpi: int = int(testcase.parent.parent.name) # testcase/lax/mpi/typ/config*
-        typ: str = testcase.parent.name
-        num_process = int(mpi/100) * int((mpi%100)/10) * int(mpi%10)
-        cmd = f"mpiexec.hydra -np {num_process} {self.config['lax_path']} {testcase.name} < /dev/null >& out"
-        lax_process = subprocess.Popen(cmd, cwd = self.config["calc_dir"] / typ, shell = True)
-        while lax_process.poll() is None:
-            time.sleep(1)
-        sf = SimulationFrame("C H O N Si")
-        sf.import_dumppos(self.config["calc_dir"] / f"{typ}/dump.pos.100")
-        return sf  
-    
-    def make_answer_by_laich(self, testcases: str)->dict[SimulationFrame]:
-        """
-        laichのテストケースを回す.
-        """
-        answer_atoms: dict[str, SimulationFrame] = {}
-        answer_energies: dict[str, list[float]] = {} # list : [temperature, kinetic_energy, potential_energy]
-        for testcase in testcases:
-            testcase = pathlib.Path(testcase)
-            typ: str = testcase.parent.name
-            if self.config["ignore_type"][testcase.parent.name]:
-                continue
-            subprocess.run(f"cp -r {testcase.parent} .".split())
-            with open(f"{testcase.parent.name}/{testcase.name}", "a") as f:
-                f.write(f"\nNNPModelPath {self.config['NNPModelPath']}")
-            cmd = f"mpiexec.hydra -np 1 {self.config['laich_path']} {testcase.name} < /dev/null >& out"
-            laich_process = subprocess.Popen(cmd, cwd = self.config["calc_dir"] / typ, shell = True)
-            while laich_process.poll() is None:
-                time.sleep(1)
-            sf = SimulationFrame("C H O N Si")
-            sf.import_dumppos(self.config["calc_dir"] / f"{typ}/dump.pos.100")
-            answer_atoms[typ] = sf
-            answer_energies[typ] = self.get_energies_from_out(self.config['calc_dir']/typ/"out", 100)
-            answer_energies[typ][1] *= 1 / 23.060553
-            answer_energies[typ][2] *= 1 / 23.060553
-            subprocess.run(f"rm -r {typ}".split())
-        return answer_atoms, answer_energies
-    
-    def get_energies_from_out(self, ofp: str, last_step: int)->list[float]:
-        """
-        Laichやlaxのoutfileから
-        温度、運動エネルギー、ポテンシャルエネルギーを読み込む
-        """
-        energies = [None, None, None]
-        with open(ofp, "r") as f:
-            lines = f.readlines()
-            for line in lines:
-                spline = line.split()
-                if len(spline) == 0:
-                    continue
-                if spline[0] == str(last_step):
-                    energies = [float(spline[i+1]) for i in range(3)]
-                    break
-        return energies
+        # print
+        self.print_result(md, omp, mpi, judge)

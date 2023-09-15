@@ -1,6 +1,7 @@
 import numpy as np
 from typing import Union, Any
 import pathlib
+from limda import SimulationFrame
 from .md_info import MDInfo
 
 class TesterMethods:
@@ -8,15 +9,21 @@ class TesterMethods:
     def __init__(self):
         pass
 
-    def set_md_config(self, id: int):
-        config: dict[str, Any] = {}
-        for col, lst in self.config["md_config"].items():
-            if len(lst) == 1:
-                config[col] = lst[0]
-            else:
-                config[col] = lst[id]
-        
-        return config
+    def set_initial_velocity(self, md):
+        sf = SimulationFrame()
+        sf.import_para_from_list(md.para)
+        sf.import_input(md.input_path)
+        md.set_lax(111, 111)
+        cf = md.config.copy()
+        cf["TotalStep"] = 0
+        sf.lax(
+            calc_dir = self.config["calc_dir"] / "initial_velo" / f"{md.name}",
+            lax_config = cf,
+            print_lax = True,
+            exist_ok = True,
+            lax_cmd = self.config["lax_cmd"],
+        )
+        md.input_path = self.config["calc_dir"] / "initial_velo" / f"{md.name}" / "dump.pos.0" 
 
     def get_energy_from_out(self, ofp: Union[str, pathlib.Path], md: MDInfo)->list[float]:
         """

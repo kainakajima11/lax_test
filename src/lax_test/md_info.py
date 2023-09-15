@@ -1,8 +1,9 @@
-from typing import Any
+from typing import Any, Union
+import pathlib
 
 class MDInfo:
     para: list[str]
-    input_path: str
+    input_path: Union[str, pathlib.Path]
     config: dict[str, Any]
     mask_info: list[str]
     name: str
@@ -11,11 +12,22 @@ class MDInfo:
                  para,
                  input_path,
                  mask_info,
-                 name):
+                 name,
+                 config,
+                 input_id):
         self.para = para
         self.input_path = input_path
         self.mask_info = mask_info
-        self.name = name            
+        self.name = name
+        self.config = {}
+        self.set_config(config, input_id)         
+    
+    def set_config(self, config: dict[str, Any], id: int):
+        for col, lst in config.items():
+            if len(lst) == 1:
+                self.config[col] = lst[0]
+            else:
+                self.config[col] = lst[id]
 
     def set_laich(self):
         # mask_info
