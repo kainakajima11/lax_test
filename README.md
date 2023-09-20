@@ -1,7 +1,5 @@
 # Lax Test
 laxのテストを行う。<br>
-条件を自分で指定してテストを行えるrun_lax_test.pyと<br>
-用意してあるテストケースを用いたテストが行えるrun_lax_testcases.pyを使用できます。
 ## Add path
 以下を.bashrcに追記してください.
 ```
