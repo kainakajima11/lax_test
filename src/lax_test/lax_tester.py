@@ -56,15 +56,15 @@ class LaxTester(TesterMethods):
         また入力がなかった部分にdefault値をsetする.
         """
         cf = self.config
-        assert cf["mode"] == "own" #  or cf["mode"] == "testcase" or cf["mode"] == "random" # todo
+        assert cf["mode"] == "free" #  or cf["mode"] == "testcase" or cf["mode"] == "random" # todo
 
         # calc_path
         if not cf["calc_dir"]:
             cf["calc_dir"] = "lax_test_calc"
         cf["calc_dir"] = pathlib.Path(cf["calc_dir"])
 
-        # own
-        if cf["mode"] == "own":
+        # free
+        if cf["mode"] == "free":
             # check input_paths, input_names
             assert cf["input_paths"]
             input_len = len(cf["input_paths"])

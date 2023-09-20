@@ -16,6 +16,7 @@ class TesterMethods:
         md.set_lax(111, 111)
         cf = md.config.copy()
         cf["TotalStep"] = 0
+        cf["ReadVelocity"] = 0
         sf.lax(
             calc_dir = self.config["calc_dir"] / "initial_velo" / f"{md.name}",
             lax_config = cf,

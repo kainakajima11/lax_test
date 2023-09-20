@@ -32,10 +32,12 @@ class MDInfo:
     def set_laich(self):
         # mask_info
         self.change_mask_info_for_laich()
+
         # mpi
         self.config["MPIGridX"] = 1
         self.config["MPIGridY"] = 1
         self.config["MPIGridZ"] = 1
+        
         # omp
         self.config["OMPGridX"] = 1
         self.config["OMPGridY"] = 1
