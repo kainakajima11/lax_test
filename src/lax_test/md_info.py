@@ -46,27 +46,43 @@ class MDInfo:
     def change_mask_info_for_laich(self):
         if not self.mask_info:
             return
+
+        new_mask_info = []
         for i, info in enumerate(self.mask_info):
             splitted_info = info.split()
             if splitted_info[0] == "#move":
-                self.mask_info[i] = self.laich_move_info(splitted_info)
-            elif splitted_info[0] == "#press":
-                self.mask_info[i] = self.laich_press_info(splitted_info)
+                new_mask_info = self.laich_move_info(splitted_info ,new_mask_info)
+            elif splitted_info[0] == "#pressz":
+                new_mask_info = self.laich_press_info(splitted_info, new_mask_info)
+        self.mask_info = new_mask_info
     
-    def laich_move_info(spinfo: list[str]):
-        info = ""
-        if spinfo[3] == "-" or spinfo[3] == "0":
-            if spinfo[5] == "-" or spinfo[5] == "0":
-                if spinfo[7] == "-" or spinfo[7] == "0":
-                    info = f"#fix {spinfo[1]} rigid {spinfo[2]} {spinfo[4]} {spinfo[6]}"
-        else:
-            info = " ".join(spinfo.insert(2, "rigid"))
-
-        return info
+    def laich_move_info(self, spinfo: list[str], new_mask_info: list[str]):
+        if spinfo[2] == "x":
+            if float(spinfo[3]) == 0.0:
+                new_mask_info.append(f"#fix {spinfo[1]} rigid {spinfo[2]} - -")
+                spinfo[2] = "-"
+                spinfo[3] = "-"
+        if spinfo[4] == "y":
+            if float(spinfo[5]) == 0.0:
+                new_mask_info.append(f"#fix {spinfo[1]} rigid - {spinfo[4]} -")
+                spinfo[4] = "-"
+                spinfo[5] = "-"
+        if spinfo[6] == "z":
+            if float(spinfo[7]) == 0.0:
+                new_mask_info.append(f"#fix {spinfo[1]} rigid - - {spinfo[6]}")
+                spinfo[6] = "-"
+                spinfo[7] = "-"
+        if spinfo[2] == "x" or spinfo[4] == "y" or spinfo[6] == "z":
+            spinfo.insert(2, "rigid")
+            new_mask_info.append(" ".join(spinfo))
+        return new_mask_info
     
-    def laich_press_info(spinfo: list[str]):
-        info = " ".join(spinfo.insert(2, "z"))
-        return info
+    def laich_press_info(self, spinfo: list[str], new_mask_info: list[str]):
+        spinfo[0] = "#press"
+        spinfo.insert(2, "z")
+        new_mask_info.append(" ".join(spinfo))
+        return new_mask_info
+        
 
     def set_lax(self, omp: int, mpi: int):
         # omp
