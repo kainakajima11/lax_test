@@ -16,9 +16,11 @@ class LaxTester(TesterMethods):
     atoms_diff: dict[str, float]
     cell_diff: npt.NDArray[np.float64]
     energy_diff: npt.NDArray[np.float64]
+    result_comments_list: list[str]
 
     def __init__(self, config: dict[str ,Any]):
         self.config: dict[str, Any] = config
+        self.result_comments_list = []
 
     def run_lax_test(self):
         """
@@ -48,7 +50,9 @@ class LaxTester(TesterMethods):
 
                 # 結果を比較
                 self.compare_result(md, omp, mpi)
-    
+
+        self.print_all_results()
+
     def check_and_set_config(self):
         """
         tester_configが必要な情報を含んでないかや、
@@ -147,8 +151,8 @@ class LaxTester(TesterMethods):
             self.get_energy_from_out(self.config["calc_dir"] / "laich" / laich_md.name / "out",
                                      md)
         # unit adjustment
-        self.laich_energy[1] *= 1 / 23.060553
-        self.laich_energy[2] *= 1 / 23.060553
+        for i in range(1, 4):
+            self.laich_energy[i] *= 1 / 23.060553
 
     def calculate_by_lax(self, md: MDInfo, omp: int, mpi: int):
         """

@@ -38,7 +38,7 @@ class TesterMethods:
                 if len(spline) == 0:
                     continue
                 if spline[0] == str(md.config["TotalStep"]):
-                    energies = np.array([float(spline[i+1]) for i in range(3)])
+                    energies = np.array([float(spline[i+1]) for i in range(4)])
                     break
         return energies
 
@@ -83,7 +83,7 @@ class TesterMethods:
         """
         self.energy_diff = np.abs(self.laich_energy - self.lax_energy)
         energy_judge = True
-        for diff, energy in zip(self.energy_diff, ["temp", "Kin_E", "Pot_E"]):
+        for diff, energy in zip(self.energy_diff, ["temp", "Kin_E", "Pot_E", "Total_E"]):
             if not energy in self.config["allowable_error"]:
                 continue
             if self.config["allowable_error"][energy] < diff:
@@ -96,18 +96,28 @@ class TesterMethods:
         laichとlaxを比較した結果を出力する
         """
         if judge:
-            print(f"Pass : {md.name}, OMP : {omp}, MPI : {mpi}", flush=True)
+            pass_comment = f"Pass : {md.name}, OMP : {omp}, MPI : {mpi}"
+            self.result_comments_list.append(pass_comment)
+            print(pass_comment, flush=True)
         else:
-            print(f"Error : {md.name}, OMP : {omp}, MPI : {mpi}", flush=True)
-            print("---------------------------------------", flush=True)
-            print(f"X                : {self.atoms_diff['x']}", flush = True)
-            print(f"Y                : {self.atoms_diff['y']}", flush = True)
-            print(f"Z                : {self.atoms_diff['z']}", flush = True)
-            print(f"V_X              : {self.atoms_diff['vx']}", flush = True)
-            print(f"V_Y              : {self.atoms_diff['vy']}", flush = True)
-            print(f"V_Z              : {self.atoms_diff['vz']}", flush = True)
-            print(f"Cell             : {self.cell_diff}", flush = True)
-            print(f"Temperature      : {self.energy_diff[0]}", flush = True)
-            print(f"Kinetic_energy   : {self.energy_diff[1]}", flush = True)
-            print(f"Potential_energy : {self.energy_diff[2]}", flush = True)
-            print("---------------------------------------", flush = True)
+            error_comment = f"Error : {md.name}, OMP : {omp}, MPI : {mpi}\n" \
+                        + "---------------------------------------\n" \
+                        + f"X                : {self.atoms_diff['x']}\n" \
+                        + f"Y                : {self.atoms_diff['y']}\n" \
+                        + f"Z                : {self.atoms_diff['z']}\n" \
+                        + f"V_X              : {self.atoms_diff['vx']}\n" \
+                        + f"V_Y              : {self.atoms_diff['vy']}\n" \
+                        + f"V_Z              : {self.atoms_diff['vz']}\n" \
+                        + f"Cell             : {self.cell_diff}\n" \
+                        + f"Temperature      : {self.energy_diff[0]}\n" \
+                        + f"Kinetic_energy   : {self.energy_diff[1]}\n" \
+                        + f"Potential_energy : {self.energy_diff[2]}\n" \
+                        + f"Total_energy     : {self.energy_diff[3]}\n" \
+                        + "---------------------------------------\n"
+            self.result_comments_list.append(error_comment)
+            print(error_comment, flush=True)
+
+    def print_all_results(self):
+        print("\n\n-- Lax Test Results ---\n\n")
+        for comment in self.result_comments_list:
+            print(comment, flush=True)
