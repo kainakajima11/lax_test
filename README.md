@@ -20,8 +20,8 @@ para: # input_pathの数だけ
 - [C, H, O, N, Si]
 
 input_paths: # input fileのpath # 複数指定可能
-- /nfshome17/knakajima/lax_test/src/testcase/lax/111/simple/input.rd
-- /nfshome17/knakajima/lax_test/src/testcase/lax/112/simple/input.rd
+- /nfshome17/knakajima/lax_test/src/testcase/H2O/input.rd
+- /nfshome17/knakajima/input/input.rd
 
 input_names:  # input_fileごとのテストの名前 # Noneなら0,1,2...
 - H2O
@@ -37,11 +37,11 @@ mask_info_names:
 - move
 - press_fix
 
-OMPGrid: # OMPGrid 111 -> (x,y,z) = (1,1,1)
-- 111
-- 222 
+OMP: # OMP_NUM_THREADS
+- 1
+- 4 
 
-MPIGrid: # MPIGrid # OMPGridと同サイズにする
+MPIGrid: # MPIGrid # OMPと同サイズにする
 - 111
 - 222
 
@@ -94,4 +94,10 @@ test_lax.pyを実行する.
 ```
 test_lax.py test_config.py
 ```
-
+## Specification
+### mode : free <br>
+計算は、input_pathの大きさ x mask_infoの大きさ x omp,mpiの大きさ 回、行われます。<br><br>
+inputに関する条件(input_names, para, md_config内の条件)はinput_pathsの数だけ指定<br>
+(ただし、md_config内の条件は一つしかなければ、その条件がすべて使用される。)<br><br>
+mask_info_namesは、mask_infoと同じ数指定する。<br><br>
+OMPとMPIは同数指定する。<br><br>
