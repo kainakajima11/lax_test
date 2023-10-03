@@ -84,12 +84,7 @@ class MDInfo:
         return new_mask_info
         
 
-    def set_lax(self, omp: int, mpi: int):
-        # omp
-        self.config["OMPGridX"] = omp // 100
-        self.config["OMPGridY"] = (omp % 100) // 10
-        self.config["OMPGridZ"] = omp % 10
-
+    def set_lax(self, mpi: int):
         # mpi
         self.config["MPIGridX"] = mpi // 100
         self.config["MPIGridY"] = (mpi % 100) // 10

@@ -45,7 +45,7 @@ class LaxTester(TesterMethods):
             self.calculate_by_laich(md)
 
             #lax
-            for omp, mpi in zip(self.config["OMPGrid"], self.config["MPIGrid"]):
+            for omp, mpi in zip(self.config["OMP"], self.config["MPIGrid"]):
                 self.calculate_by_lax(md, omp, mpi)
 
                 # 結果を比較
@@ -84,11 +84,10 @@ class LaxTester(TesterMethods):
             assert len(cf["mask_info"]) == len(cf["mask_info_names"])
 
             # omp
-            if not cf["OMPGrid"]:
-                cf["OMPGrid"] = [111]
-            for omp in cf["OMPGrid"]:
-                assert 99 < omp and omp < 1000
-                assert str(omp)[0] != "0" and str(omp)[1] != "0" and str(omp)[2] != "0" 
+            if not cf["OMP"]:
+                cf["OMP"] = [1]
+            for omp in cf["OMP"]:
+                assert 1 <= omp
 
             # mpi
             if not cf["MPIGrid"]:
@@ -163,13 +162,14 @@ class LaxTester(TesterMethods):
         self.lax = SimulationFrame()
         self.lax.import_para_from_list(md.para)
         self.lax.import_file(md.input_path)
-        md.set_lax(omp, mpi)
+        md.set_lax(mpi)
         self.lax.lax(calc_dir = self.config["calc_dir"] / "lax" / f"{md.name}_{omp}_{mpi}",
                      lax_config = md.config,
                      print_lax = True,
                      exist_ok = True,
                      lax_cmd = self.config["lax_cmd"],
-                     mask_info = md.mask_info
+                     mask_info = md.mask_info,
+                     omp_num_threads = omp,
                      )
         self.lax.import_dumppos(self.config["calc_dir"] / "lax" / f"{md.name}_{omp}_{mpi}" / f"dump.pos.{md.config['TotalStep']}")
         # 結果からenergyを抜き取る

@@ -13,7 +13,7 @@ class TesterMethods:
         sf = SimulationFrame()
         sf.import_para_from_list(md.para)
         sf.import_input(md.input_path)
-        md.set_lax(111, 111)
+        md.set_lax(111)
         cf = md.config.copy()
         cf["TotalStep"] = 0
         cf["ReadVelocity"] = 0
